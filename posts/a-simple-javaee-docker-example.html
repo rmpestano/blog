@@ -146,10 +146,10 @@ After describing our image we have to build it. Run the following command from t
 docker -H tcp://127.0.0.1:2375 build -t javaee_sample java_ee/
 ====
 
-* -H flag specify docker daemon address(we are using tcp to communicate with daemon);
-* build is the command itself;
-* -t specify the name of the tag to identify the image (javaee_sample in this case);
-* java_ee/ is the folder containing the Dockerfile describing our image.
+* *-H* flag specify docker daemon address(we are using tcp to communicate with daemon);
+* *build* is the command itself;
+* *-t* specify the name of the tag to identify the image (javaee_sample in this case);
+* *java_ee/* is the folder containing the Dockerfile describing our image.
 
 More docker commands http://blog.arungupta.me/docker-common-commands-cheatsheet-techtip59/[can be found here^]. Here is the output of the command:
 
@@ -171,8 +171,8 @@ The container can be started with the command:
 docker -H tcp://127.0.0.1:2375 run -p 8180:8080 javaee_sample
 ====
 
-* -p specifies the container port(8080) to be exposed on the host machine. Port 8180 in this case (_EXPOSE_ Dockerfile command);
-* run is the command itself;
+* *-p* specifies the container port(8080) to be exposed on the host machine. Port 8180 in this case (_EXPOSE_ Dockerfile command);
+* *run* is the command itself;
 * *javaee_sample* is the name of the image.
 
 
