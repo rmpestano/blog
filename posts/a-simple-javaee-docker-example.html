@@ -1,0 +1,230 @@
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+  <script type="text/javascript" src="../js/opal.js"></script>
+  <script type="text/javascript" src="../js/asciidoctor.js"></script>
+  <script type="text/javascript" src="../js/asciidocfy.js"></script>
+  <script type="text/javascript" src="../js/jquery.min.js"></script>
+  <script type="text/javascript" src="../js/highlight.min.js"></script>
+  <script type="text/javascript" src="../js/renderer.js"></script>
+</head>
+
+<body>
+
+<div class="themes" style="width:150px;font-size:10px;position:relative;top:0;right:0px"><b>Theme:&nbsp;</b>
+<select style="width:100px;font-size:10px;" name="select" onchange="window.location.href = window.location.href.substring(0,window.location.href.indexOf('?')) + '?theme='+ this.value">
+  <option value="asciidoctor">Asciidoctor</option> 
+  <option value="colony">Colony</option>
+  <option value="foundation" selected>Foundation</option>
+  <option value="github">Github</option>
+  <option value="golo">Golo</option>
+  <option value="maker">Maker</option>
+  <option value="rubygems">Rubygems</option>
+</select>
+</div>
+ 
+<div id="content">
+
+:imagesdir: images
+
+= A Simple Java EE Docker Example
+
+In this post we will play a bit with docker in the context of Java EE. Here is what we will do:
+
+* Create, build and run a docker image;
+* the image will start a wildfly server within a JavaEE sample application deployed;
+* show some docker commands;
+* start multiple containers to see the same app running on different ports.
+
+
+== Introduction
+
+I will not introduce docker as there are already many good references on the subject. To create this post I’ve read the following tutorials:
+
+. Docker User guide footnoteref:[Docker User guide, https://docs.docker.com/engine/userguide/];
+. Docker instalation tutorial footnoteref:[docker instalation, https://docs.docker.com/engine/installation/linux/ubuntulinux/]
+. Working with docker images footnoteref:[Working with docker images, https://docs.docker.com/engine/userguide/containers/dockerimages/];
+. this great post, Docker begginers tutorial footnote:[https://blog.talpor.com/2015/01/docker-beginners-tutorial/];
+. Arun Gupta’s tech tips: http://blog.arungupta.me/getting-started-with-docker/[#39^], http://blog.arungupta.me/create-own-docker-image-techtip57/[#57], http://blog.arungupta.me/javaee7-lab-wildfly-docker/[#61] and http://blog.arungupta.me/wildfly-javaee7-mysql-link-two-docker-container-techtip65/[#65^].
+
+== Pre requisites
+
+To run this tutorial you will need:
+
+* A docker daemon running on your host machine
+** after installing docker add this lines in *‘etc\default\docker‘* file: *DOCKER_OPTS="-H tcp://127.0.0.1:2375 -H unix:///var/run/docker.sock"*
+** after that, restart your machine and try to run the command:  _docker -H tcp://127.0.0.1:2375 –version_
+the output must be something like: _Docker version 1.4.1, build 5bc2ff8_
+* http://download.jboss.org/wildfly/8.2.0.Final/wildfly-8.2.0.Final.zip[A wildfly 8.2.0 installation(unziped)^];
+* http://oracle.com/technetwork/java/javase/downloads/index.html[jdk-8u25-linux-x64.tar.gz file^];
+* car-service.war https://github.com/rmpestano/javaee-docker-sample/tree/master/java_ee/car-service.war[available here];
+* Dockerfile https://github.com/rmpestano/javaee-docker-sample/tree/master/java_ee/Dockerfile[available here^].
+
+== Creating the Docker image
+
+Docker images represent/describe the container itself. As I got limited internet access (3g from my cellphone) I have created an image using resources from my local machine. So the image will only work if it is build in a directory containing the following files:
+
+image::docker-01.png[]
+
+* *wildfly-8.2.0.Final*: the application server
+* *car-service.war*: the app we will deploy
+* *Dockerfile*: the file describing this container
+* *jdk-8u25-linux-x64.tar.gz*: the java version we will install in the container
+
+NOTE: It is not good practice to use fixed resources in a docker container as it will only work if the files are present during the image build. The best approach is to install everything from scratch and download necessary files. https://github.com/rmpestano/spring-vs-ejb-vs-cdi-benchmark/blob/docker/docker/wildfly/Dockerfile[Here is an example of docker file] that download/install/deploy an app into wildfly 10 without using local files.
+
+Here is our Dockerfile content:
+
+----
+FROM ubuntu <1>
+MAINTAINER Rafael Pestano <rmpestano@gmail.com>
+
+ 
+# setup WildFly 
+COPY wildfly-8.2.0.Final /opt/wildfly <2>
+
+# install example app on wildfy
+COPY car-service.war /opt/wildfly/standalone/deployments/ <3>
+
+
+# setup Java
+
+RUN mkdir /opt/java <4>
+
+COPY jdk-8u25-linux-x64.tar.gz /opt/java/ <4>
+
+# change dir to Java installation dir 
+
+WORKDIR /opt/java/ <5>
+
+RUN tar -zxf jdk-8u25-linux-x64.tar.gz <4>
+
+# setup nvironment variables
+
+RUN update-alternatives --install /usr/bin/javac javac /opt/java/jdk1.8.0_25/bin/javac 100 <4>
+
+RUN update-alternatives --install /usr/bin/java java /opt/java/jdk1.8.0_25/bin/java 100 <4>
+
+ 
+RUN update-alternatives --display java <4>
+
+RUN java -version
+
+
+# Expose the ports we're interested in
+EXPOSE 8080 9990 <6>
+
+# Set the default command to run on boot
+# This will boot WildFly in the standalone mode and bind to all interface
+CMD ["/opt/wildfly/bin/standalone.sh", "-c", "standalone-full.xml", "-b", "0.0.0.0"] <7>
+----
+
+<1> The image inherits from ubuntu, an image which installs Ubuntu OS. Ubuntu image is installed when you follow the docker instalation tutorial footnoteref:[docker instalation].
+
+<2> Next we copy the server to the folder _/opt/wildfly_ inside the container we are creating. COPY is a command available in Dockerfile DSL.
+All commands can be found in Dockerfile reference guide footnote:[https://docs.docker.com/engine/reference/builder/].
+
+<3> Next we copy our app war inside the application server;
+
+<4> After, we setup Java by unziping it to _/opt/java_ inside the container and setting up environment variables. A better approach would be using apt-get.
+
+<5> Change current directory to run next commands;
+
+<6> Later I use _EXPOSE 8080 9990_ to tell docker the ports that can be exposed by the container. Remember, a container is the instantiation of a Docker image. When we run an image (docker run) we can specify which ports are accessible to the host machine.
+
+<7> Finally we specify the default command. 
+
+NOTE: This command will be fired everytime our container is stated.
+
+
+== Building the image
+
+After describing our image we have to build it. Run the following command from the parent folder containing the Dockerfile:
+
+====
+docker -H tcp://127.0.0.1:2375 build -t javaee_sample java_ee/
+====
+
+* -H flag specify docker daemon address(we are using tcp to communicate with daemon);
+* build is the command itself;
+* -t specify the name of the tag to identify the image (javaee_sample in this case);
+* java_ee/ is the folder containing the Dockerfile describing our image.
+
+More docker commands http://blog.arungupta.me/docker-common-commands-cheatsheet-techtip59/[can be found here^]. Here is the output of the command:
+
+image::docker-02.png[]
+
+After that we can see the created image by listing images installed: 
+
+====
+docker -H tcp://127.0.0.1:2375 images  
+====
+
+image::docker-03.png[]
+
+== Starting the container
+
+The container can be started with the command: 
+
+====
+docker -H tcp://127.0.0.1:2375 run -p 8180:8080 javaee_sample
+====
+
+* -p specifies the container port(8080) to be exposed on the host machine. Port 8180 in this case (_EXPOSE_ Dockerfile command);
+* run is the command itself;
+* *javaee_sample* is the name of the image.
+
+
+The output of command is wildfly starting because we set it as initial command (CMD Dockerfile command):
+
+image::docker-04.png[]
+
+== Running multiple containers
+
+We can instantiate many container as we want since their ports don’t conflict in the host machine. I will start two more containers exposing port _8080_ to _8280_ and _8380_ respectively:
+
+----
+docker -H tcp://127.0.0.1:2375 run -p 8280:8080 javaee_sample
+
+docker -H tcp://127.0.0.1:2375 run -p 8380:8080 javaee_sample
+----
+
+To list started containers we can use the command 
+
+====
+docker -H tcp://127.0.0.1:2375 ps
+====
+
+Here is the output:
+
+----
+rmpestano@rmpestano-ubuntu:~/docker /images$ docker -H tcp://127.0.0.1:2375 ps
+CONTAINER ID        IMAGE                  COMMAND                CREATED             STATUS              PORTS                              NAMES
+7b9079806e69        javaee_sample:latest    /opt/wildfly/bin/st   27 seconds ago      Up 27 seconds       9990/tcp, 0.0.0.0:8280->8080/tcp   suspicious_lovelace
+d4975e825751        javaee_sample:latest    /opt/wildfly/bin/st   28 seconds ago      Up 28 seconds       9990/tcp, 0.0.0.0:8380->8080/tcp   loving_hopper
+96e58eb65126        javaee_sample:latest    /opt/wildfly/bin/st   42 seconds ago      Up 42 seconds       9990/tcp, 0.0.0.0:8180->8080/tcp   clever_cori
+----
+
+And now we can access the three apps in the browser at the same time:
+
+image::docker-05.png[]
+
+
+You can stop the container by its ID or by name with *docker -H tcp://127.0.0.1:2375 stop suspicious_lovelace*.
+
+Remember that all data will be lost when the container is stopped. Use Docker volumes footnote:[https://docs.docker.com/engine/userguide/containers/dockervolumes] for persistent data.
+
+For any feedback and comments, see the original post: https://rpestano.wordpress.com/2015/01/10/a-simple-java-ee-docker-example/. 
+
+
+</div>
+
+  <script type="text/javascript">
+      $( document ).ready(function() {
+      loadContent();
+   });
+        
+   </script>
+</body>
+</html>

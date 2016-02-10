@@ -1,0 +1,121 @@
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+  <script type="text/javascript" src="../js/opal.js"></script>
+  <script type="text/javascript" src="../js/asciidoctor.js"></script>
+  <script type="text/javascript" src="../js/asciidocfy.js"></script>
+  <script type="text/javascript" src="../js/jquery.min.js"></script>
+  <script type="text/javascript" src="../js/highlight.min.js"></script>
+  <script type="text/javascript" src="../js/renderer.js"></script>
+</head>
+
+<body>
+
+<div class="themes" style="width:150px;font-size:10px;position:relative;top:0;right:0px"><b>Theme:&nbsp;</b>
+<select style="width:100px;font-size:10px;" name="select" onchange="window.location.href = window.location.href.substring(0,window.location.href.indexOf('?')) + '?theme='+ this.value">
+  <option value="asciidoctor">Asciidoctor</option> 
+  <option value="colony">Colony</option>
+  <option value="foundation" selected>Foundation</option>
+  <option value="github">Github</option>
+  <option value="golo">Golo</option>
+  <option value="maker">Maker</option>
+  <option value="rubygems">Rubygems</option>
+</select>
+</div>
+ 
+<div id="content">
+
+:imagesdir: images
+
+= The Simplest "Micro" Deployment (ArqTip #2)
+
+The second Arquillian tip is the simplest “micro” deployment. Its a Arquillian deployment that uses the hole project as deployment with no need for adding individual classes, packages or libraries:
+
+image::simplest-deployment.png[]
+
+[source,java,linenumbers]
+----
+@RunWith(Arquillian.class)  
+public class SimplestDeployment {
+ 
+    @Deployment
+    public static Archive<?> createDeployment() { 
+        WebArchive war = ShrinkWrap.create(ZipImporter.class, "cdi-crud.war").
+                importFrom(new File("target/cdi-crud.war")).as(WebArchive.class);
+        war.addAsResource("persistence.xml", "META-INF/persistence.xml");//replace with test persistence
+        return war;
+    }
+ 
+    @Inject
+    CarService carService;
+ 
+ 
+    @Test
+    @UsingDataSet("car.yml")
+    public void shouldCountCars() {
+        assertNotNull(carService);
+        assertEquals(carService.crud().count(), 4);
+    }
+}
+----
+
+This basically uses a previously builded project as deployment and just replaces its persistence.xml to use a https://github.com/rmpestano/cdi-crud/blob/cdi-crud-universe/src/test/resources/persistence.xml[test database^].
+
+Compare it with a https://github.com/rmpestano/cdi-crud/blob/cdi-crud-universe/src/test/java/com/cdi/crud/util/Deployments.java#L27[traditional deployment here^].
+
+Of course that this simplicity comes with a price:
+
+. Its not a true micro deployment because it uses the hole application. If your application is big the deployment can take considerable time(seconds);
+
+. You need to build the application before running the test. Here you lose a big advantage of Arquillian which is to *not build the application if a test (even functional tests) has failed*.
+
+To overcome problem #2 you can execute the tests in surefire *integration-tests phase*:
+
+[source,xml]
+----
+<profile>
+    <id>simple-deployment</id>
+    <build>
+        <plugins>
+            <plugin>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>2.16</version>
+                <executions>
+                    <execution>
+                        <id>after-package</id>
+                        <phase>integration-test</phase>
+                        <goals>
+                            <goal>test</goal>
+                        </goals>
+                        <configuration>
+                            <skipTests>false</skipTests>
+                            <includes>
+                                <include>**/*SimplestDeployment.java</include>
+                            </includes>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</profile>
+----
+		
+There is an issue from 2012 in Arquillian issue tracker which address this feature of a “simplest deployment” using a single annotation, https://issues.jboss.org/browse/ARQ-74[see the issue here^].
+
+Source code of this post can be found here: https://github.com/rmpestano/cdi-crud/blob/cdi-crud-universe/src/test/java/com/cdi/crud/it/SimplestDeployment.java
+
+
+For any feedback and comments, see the original post: https://rpestano.wordpress.com/2015/11/12/the-simplest-micro-deployment-arqtip-2/.
+
+</div>
+
+  <script type="text/javascript">
+      $( document ).ready(function() {
+      loadContent();
+   });
+        
+   </script>
+</body>
+</html>
